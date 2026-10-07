@@ -27,7 +27,6 @@ func main() {
 	}
 	defer DB.Close()
 
-	// Support both REDIS_URL (full URL with TLS for Upstash) and REDIS_ADDR (plain host:port)
 	redisUrl := os.Getenv("REDIS_URL")
 	if redisUrl != "" {
 		opt, err := redis.ParseURL(redisUrl)
@@ -44,26 +43,19 @@ func main() {
 	go hub.run()
 
 	r := mux.NewRouter()
-	
-	// API Endpoints
+	r.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+		serveWs(hub, w, r)
+	})
 	r.HandleFunc("/api/v1/route", handleProxyRoute).Methods("POST")
 	r.HandleFunc("/api/v1/alerts/nearby", handleNearbyAlerts).Methods("GET")
 	r.HandleFunc("/api/v1/alerts/{id}/vote", handleVoteAlert).Methods("POST")
-	
-	// WebSocket server
-	go func() {
-		wsMux := http.NewServeMux()
-		wsMux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
-			serveWs(hub, w, r)
-		})
-		log.Println("WebSocket server listening on :8081")
-		if err := http.ListenAndServe(":8081", wsMux); err != nil {
-			log.Fatal("WebSocket server error: ", err)
-		}
-	}()
 
-	log.Println("HTTP server listening on :8080")
-	if err := http.ListenAndServe(":8080", r); err != nil {
-		log.Fatal("HTTP server error: ", err)
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	log.Printf("Server listening on :%s\n", port)
+	if err := http.ListenAndServe(":"+port, r); err != nil {
+		log.Fatal("Server error: ", err)
 	}
 }
